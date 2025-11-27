@@ -33,7 +33,7 @@ export function QuoteForm() {
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [approvalMode, setApprovalMode] = useState<"exact" | "max">("exact");
+  const [approvalMode, setApprovalMode] = useState<"exact" | "unlimited">("exact");
   const [approvalError, setApprovalError] = useState<string | null>(null);
 
   const fromToken = TOKENS_BY_SYMBOL[fromSymbol];
@@ -73,7 +73,7 @@ export function QuoteForm() {
     allowance < amountInUnits;
 
   // Calculate approval amount based on mode
-  const approvalAmount = approvalMode === "max" ? maxUint256 : amountInUnits;
+  const approvalAmount = approvalMode === "unlimited" ? maxUint256 : amountInUnits;
 
   // Approve contract write
   const {
@@ -114,7 +114,7 @@ export function QuoteForm() {
         token: fromSymbol,
         spender: SEPOLIA_SPENDER.address,
         mode: approvalMode,
-        amount: approvalMode === "max" ? "unlimited" : amount,
+        amount: approvalMode === "unlimited" ? "unlimited" : amount,
       });
     }
   }, [isApproveSuccess, fromSymbol, approvalMode, amount, refetchAllowance]);
@@ -327,9 +327,9 @@ export function QuoteForm() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setApprovalMode("max")}
+                    onClick={() => setApprovalMode("unlimited")}
                     className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-                      approvalMode === "max"
+                      approvalMode === "unlimited"
                         ? "bg-emerald-500 text-slate-950"
                         : "bg-slate-700 text-slate-300 hover:bg-slate-600"
                     }`}
@@ -337,6 +337,10 @@ export function QuoteForm() {
                     Unlimited
                   </button>
                 </div>
+
+                <p className="text-xs text-slate-400">
+                  💡 Exact is safer. Unlimited is for advanced users.
+                </p>
 
                 {/* Approve button */}
                 <button
