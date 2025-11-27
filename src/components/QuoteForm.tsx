@@ -7,6 +7,7 @@ import {
   useContractRead,
   useContractWrite,
   useWaitForTransaction,
+  useSendTransaction,
 } from "wagmi";
 import { erc20Abi, formatUnits, parseUnits, maxUint256 } from "viem";
 
@@ -14,12 +15,24 @@ import { TOKENS, TOKENS_BY_SYMBOL, SEPOLIA_CHAIN_ID } from "@/config/tokens";
 import { SEPOLIA_SPENDER } from "@/config/spenders";
 import { posthog } from "@/app/posthog-provider";
 
+type SwapData = {
+  to: `0x${string}`;
+  data: `0x${string}`;
+  value: string;
+};
+
 type QuoteResponse = {
   price: string;
   fromAmount: string;
   toAmount: string;
   estimatedGasEth: string;
   estimatedSlippagePercent: number;
+  // Swap execution data
+  swapData?: SwapData;
+  fromTokenAddress?: string;
+  toTokenAddress?: string;
+  amountInWei?: string;
+  minAmountOut?: string;
 };
 
 export function QuoteForm() {
@@ -124,6 +137,55 @@ export function QuoteForm() {
 
   const isApprovePending = isApproveLoading || isApproveWaiting;
 
+  // Swap transaction hook
+  const {
+    data: swapTxData,
+    isLoading: isSwapLoading,
+    sendTransaction: sendSwapTx,
+    error: swapTxError,
+  } = useSendTransaction({
+    mode: "recklesslyUnprepared",
+  } as any);
+
+  // Wait for swap transaction
+  const { isLoading: isSwapWaiting, isSuccess: isSwapSuccess } =
+    useWaitForTransaction({
+      hash: swapTxData?.hash,
+    });
+
+  // Handle successful swap
+  useEffect(() => {
+    if (isSwapSuccess && swapTxData?.hash && quote) {
+      posthog?.capture("swap_mined", {
+        fromToken: fromSymbol,
+        toToken: toSymbol,
+        amountIn: quote.fromAmount,
+        amountOut: quote.toAmount,
+        tx_hash: swapTxData.hash,
+      });
+      setSwapMessage("✅ Swap successful!");
+      // Refresh allowance after swap
+      refetchAllowance();
+    }
+  }, [isSwapSuccess, swapTxData?.hash, quote, fromSymbol, toSymbol, refetchAllowance]);
+
+  // Handle swap error
+  useEffect(() => {
+    if (swapTxError) {
+      const errorMessage = swapTxError.message?.slice(0, 150) || "Unknown error";
+      posthog?.capture("swap_failed", {
+        fromToken: fromSymbol,
+        toToken: toSymbol,
+        amountIn: quote?.fromAmount,
+        amountOut: quote?.toAmount,
+        err_msg: errorMessage,
+      });
+      setSwapMessage(`❌ Swap failed: ${errorMessage}`);
+    }
+  }, [swapTxError, fromSymbol, toSymbol, quote]);
+
+  const isSwapPending = isSwapLoading || isSwapWaiting;
+
   // Handle approve button click
   function handleApprove() {
     if (!walletAddress || !fromToken) return;
@@ -140,9 +202,11 @@ export function QuoteForm() {
     approveWrite?.();
   }
 
-  // Handle swap button click
+  // Handle swap button click - sends real transaction!
   function handleSwap() {
-    if (!walletAddress || !fromToken || !quote) return;
+    if (!walletAddress || !fromToken || !quote || !quote.swapData) return;
+
+    setSwapMessage(null);
 
     posthog?.capture("swap_clicked", {
       fromToken: fromSymbol,
@@ -151,10 +215,14 @@ export function QuoteForm() {
       amountOut: quote.toAmount,
     });
 
-    setSwapMessage("🚧 Swap not wired yet – coming soon!");
-    
-    // Clear message after 3 seconds
-    setTimeout(() => setSwapMessage(null), 3000);
+    // Send the actual swap transaction
+    sendSwapTx?.({
+      recklesslySetUnpreparedRequest: {
+        to: quote.swapData.to,
+        data: quote.swapData.data,
+        value: BigInt(quote.swapData.value),
+      },
+    } as any);
   }
 
   // Check if swap is ready
@@ -162,7 +230,9 @@ export function QuoteForm() {
     walletAddress && 
     chainId === SEPOLIA_CHAIN_ID && 
     quote && 
-    !needsApproval;
+    quote.swapData &&
+    !needsApproval &&
+    !isSwapPending;
 
   async function handleGetQuote(e: FormEvent) {
     e.preventDefault();
@@ -200,6 +270,7 @@ export function QuoteForm() {
           fromSymbol,
           toSymbol,
           amount,
+          walletAddress, // Include wallet for swap calldata
         }),
       });
 
@@ -447,13 +518,31 @@ export function QuoteForm() {
               disabled={!canSwap}
               className="w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Swap
+              {isSwapLoading
+                ? "Confirm in wallet…"
+                : isSwapWaiting
+                ? "Swapping…"
+                : "Swap"}
             </button>
 
             {swapMessage && (
-              <p className="mt-2 text-amber-300 text-xs text-center">
+              <p className={`mt-2 text-xs text-center ${
+                swapMessage.includes("✅") ? "text-emerald-300" : 
+                swapMessage.includes("❌") ? "text-red-400" : "text-amber-300"
+              }`}>
                 {swapMessage}
               </p>
+            )}
+
+            {isSwapSuccess && (
+              <a
+                href={`https://sepolia.etherscan.io/tx/${swapTxData?.hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 text-xs text-blue-400 underline block text-center"
+              >
+                View on Etherscan ↗
+              </a>
             )}
           </>
         )}
