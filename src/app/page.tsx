@@ -1,65 +1,92 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useRef } from "react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, useNetwork } from "wagmi";
+import { QuoteForm } from "../components/QuoteForm";
+import { posthog } from "./posthog-provider";
+
+export default function HomePage() {
+  const { address, isConnected } = useAccount();
+  const { chain } = useNetwork();
+
+  const isOnSepolia = chain?.name === "Sepolia";
+  const canQuote = isConnected && isOnSepolia;
+
+  const hasTrackedConnect = useRef(false);
+
+  useEffect(() => {
+    if (!isConnected || !address || !chain) return;
+    if (!posthog || hasTrackedConnect.current) return;
+
+    posthog.identify(address);
+
+    posthog.capture("connect", {
+      chainId: chain.id,
+    });
+
+    hasTrackedConnect.current = true;
+  }, [isConnected, address, chain]);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="w-full max-w-md space-y-6 border border-slate-800 rounded-xl p-6 bg-slate-900/60 shadow-lg">
+      <header className="space-y-2">
+        <h1 className="text-xl font-semibold">Wallet Swap Assistant</h1>
+        <p className="text-sm text-slate-300">
+          v0.1 · Testnet-only · Connect your wallet on Sepolia to start.
+        </p>
+      </header>
+
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-slate-300">Wallet</span>
+        <ConnectButton chainStatus="icon" showBalance={false} />
+      </div>
+
+      <div className="rounded-lg bg-slate-950/60 p-4 space-y-2 text-sm">
+        <p className="font-medium text-slate-100">Status</p>
+
+        {!isConnected && (
+          <p className="text-slate-300">
+            Not connected. Click &ldquo;Connect Wallet&rdquo; to continue.
           </p>
+        )}
+
+        {isConnected && (
+          <>
+            <p className="text-slate-300 break-all">
+              <span className="font-medium text-slate-100">Address:</span>{" "}
+              {address}
+            </p>
+            <p className="text-slate-300">
+              <span className="font-medium text-slate-100">Network:</span>{" "}
+              {chain?.name ?? "Unknown"}
+            </p>
+
+            {!isOnSepolia && (
+              <p className="text-amber-300 mt-2">
+                You&apos;re on <span className="font-semibold">{chain?.name}</span>.{" "}
+                Switch to <span className="font-semibold">Sepolia</span> in your wallet
+                to use the assistant. We only support testnet for v0.1.
+              </p>
+            )}
+
+            {isOnSepolia && (
+              <p className="text-emerald-300 mt-2">
+                ✅ Connected on Sepolia. You can request a test quote below.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Quote form */}
+      {canQuote ? (
+        <QuoteForm />
+      ) : (
+        <div className="rounded-xl bg-slate-900/40 p-4 text-sm text-slate-300">
+          Connect your wallet on Sepolia to unlock quotes.
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
     </div>
   );
 }
