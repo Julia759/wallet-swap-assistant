@@ -37,6 +37,7 @@ type QuoteResponse = {
   allowanceTarget?: string; // Contract to approve (from 0x)
   sources?: Array<{ name: string; proportion: string }>; // DEX sources used
   isMock?: boolean; // True if using fallback mock data
+  mockReason?: string; // Why mock data is being used
 };
 
 export function QuoteForm() {
@@ -373,7 +374,7 @@ export function QuoteForm() {
         <div className="mt-4 rounded-xl bg-slate-950/70 px-4 py-3 text-sm leading-relaxed">
           {quote.isMock && (
             <p className="text-amber-400 text-xs mb-2">
-              ⚠️ Using mock data (no 0x API key or quote unavailable)
+              ⚠️ Using mock data: {quote.mockReason || "0x API unavailable"}
             </p>
           )}
           <p>

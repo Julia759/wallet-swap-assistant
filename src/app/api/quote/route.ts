@@ -67,7 +67,10 @@ export async function POST(req: NextRequest) {
   if (!apiKey) {
     // Fallback to mock data if no API key
     console.warn("No ZEROx_API_KEY found, using mock data");
-    return NextResponse.json(buildMockQuote(fromSymbol, toSymbol, numericAmount, fromToken, toToken, walletAddress));
+    return NextResponse.json({
+      ...buildMockQuote(fromSymbol, toSymbol, numericAmount, fromToken, toToken, walletAddress),
+      mockReason: "No ZEROx_API_KEY environment variable found",
+    });
   }
 
   try {
@@ -92,11 +95,15 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      const errorReason = errorData.reason || errorData.message || errorData.validationErrors?.[0]?.reason || `HTTP ${response.status}`;
       console.error("0x API error:", response.status, JSON.stringify(errorData));
       
       // If 0x fails, fallback to mock
-      console.warn("0x quote unavailable (status " + response.status + "), using mock data. Error:", errorData.reason || errorData.message || "unknown");
-      return NextResponse.json(buildMockQuote(fromSymbol, toSymbol, numericAmount, fromToken, toToken, walletAddress));
+      console.warn("0x quote unavailable, using mock data. Error:", errorReason);
+      return NextResponse.json({
+        ...buildMockQuote(fromSymbol, toSymbol, numericAmount, fromToken, toToken, walletAddress),
+        mockReason: `0x API error: ${errorReason}`,
+      });
     }
     
     console.log("0x API success!");
@@ -136,7 +143,10 @@ export async function POST(req: NextRequest) {
     console.error("Quote error:", error);
     
     // Fallback to mock on any error
-    return NextResponse.json(buildMockQuote(fromSymbol, toSymbol, numericAmount, fromToken, toToken, walletAddress));
+    return NextResponse.json({
+      ...buildMockQuote(fromSymbol, toSymbol, numericAmount, fromToken, toToken, walletAddress),
+      mockReason: `Exception: ${(error as Error).message}`,
+    });
   }
 }
 
@@ -182,5 +192,6 @@ function buildMockQuote(
     
     // Flag that this is mock data
     isMock: true,
+    mockReason: "0x API unavailable or no liquidity",
   };
 }
