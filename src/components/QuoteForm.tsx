@@ -47,8 +47,8 @@ export function QuoteForm() {
     isLoading: isAllowanceLoading,
     refetch: refetchAllowance,
   } = useContractRead({
-    addressOrName: fromToken?.address ?? "0x0000000000000000000000000000000000000000",
-    contractInterface: erc20Abi,
+    address: (fromToken?.address ?? "0x0000000000000000000000000000000000000000") as `0x${string}`,
+    abi: erc20Abi,
     functionName: "allowance",
     args:
       walletAddress && fromToken

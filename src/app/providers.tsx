@@ -2,7 +2,7 @@
 
 import "@rainbow-me/rainbowkit/styles.css";
 
-import { ReactNode } from "react";
+import React, { ReactNode } from "react";
 
 import {
   WagmiConfig,
@@ -37,7 +37,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <WagmiConfig client={wagmiClient}>
       <RainbowKitProvider chains={chains}>
-        {children}
+        {children as any}
       </RainbowKitProvider>
     </WagmiConfig>
   );
