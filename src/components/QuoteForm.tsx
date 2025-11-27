@@ -35,6 +35,7 @@ export function QuoteForm() {
   const [error, setError] = useState<string | null>(null);
   const [approvalMode, setApprovalMode] = useState<"exact" | "unlimited">("exact");
   const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [swapMessage, setSwapMessage] = useState<string | null>(null);
 
   const fromToken = TOKENS_BY_SYMBOL[fromSymbol];
   const toToken = TOKENS_BY_SYMBOL[toSymbol];
@@ -138,6 +139,30 @@ export function QuoteForm() {
 
     approveWrite?.();
   }
+
+  // Handle swap button click
+  function handleSwap() {
+    if (!walletAddress || !fromToken || !quote) return;
+
+    posthog?.capture("swap_clicked", {
+      fromToken: fromSymbol,
+      toToken: toSymbol,
+      amountIn: quote.fromAmount,
+      amountOut: quote.toAmount,
+    });
+
+    setSwapMessage("🚧 Swap not wired yet – coming soon!");
+    
+    // Clear message after 3 seconds
+    setTimeout(() => setSwapMessage(null), 3000);
+  }
+
+  // Check if swap is ready
+  const canSwap = 
+    walletAddress && 
+    chainId === SEPOLIA_CHAIN_ID && 
+    quote && 
+    !needsApproval;
 
   async function handleGetQuote(e: FormEvent) {
     e.preventDefault();
@@ -387,6 +412,49 @@ export function QuoteForm() {
             >
               Refresh allowance
             </button>
+          </>
+        )}
+      </div>
+
+      {/* Step 3: Swap */}
+      <div className="mt-4 rounded-xl bg-slate-950/40 px-4 py-3 text-sm">
+        <p className="mb-2 font-medium">Step 3 · Swap</p>
+
+        {!quote && (
+          <p className="text-slate-400">Get a quote first to enable swap.</p>
+        )}
+
+        {quote && (
+          <>
+            <div className="rounded-lg bg-slate-800/50 p-3 mb-3">
+              <p className="text-slate-200">
+                You send <span className="font-semibold text-white">{quote.fromAmount} {fromSymbol}</span>
+              </p>
+              <p className="text-slate-200">
+                You get <span className="font-semibold text-emerald-400">{quote.toAmount} {toSymbol}</span>
+              </p>
+            </div>
+
+            {needsApproval && (
+              <p className="text-amber-300 text-xs mb-3">
+                ⚠️ Approve {fromSymbol} first before swapping.
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSwap}
+              disabled={!canSwap}
+              className="w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              Swap
+            </button>
+
+            {swapMessage && (
+              <p className="mt-2 text-amber-300 text-xs text-center">
+                {swapMessage}
+              </p>
+            )}
           </>
         )}
       </div>
