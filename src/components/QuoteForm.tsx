@@ -373,9 +373,15 @@ export function QuoteForm() {
       {quote && (
         <div className="mt-4 rounded-xl bg-slate-950/70 px-4 py-3 text-sm leading-relaxed">
           {quote.isMock && (
-            <p className="text-amber-400 text-xs mb-2">
-              ⚠️ Using mock data: {quote.mockReason || "0x API unavailable"}
-            </p>
+            <div className="bg-amber-900/30 border border-amber-600/50 rounded-lg p-3 mb-3">
+              <p className="text-amber-400 text-sm font-medium mb-1">
+                ⚠️ Demo Mode (Testnet)
+              </p>
+              <p className="text-amber-300/70 text-xs">
+                Sepolia testnet has limited DEX liquidity. Showing estimated prices for demo purposes.
+                {quote.mockReason?.includes("no Route") && " No swap route available for this pair."}
+              </p>
+            </div>
           )}
           <p>
             1 {fromSymbol} ≈ {quote.price} {toSymbol}
