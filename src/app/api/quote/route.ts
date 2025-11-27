@@ -62,6 +62,8 @@ export async function POST(req: NextRequest) {
   // Get 0x API key from environment
   const apiKey = process.env.ZEROx_API_KEY;
 
+  console.log("API Key present:", !!apiKey, "Key prefix:", apiKey?.substring(0, 8));
+
   if (!apiKey) {
     // Fallback to mock data if no API key
     console.warn("No ZEROx_API_KEY found, using mock data");
@@ -90,16 +92,14 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error("0x API error:", response.status, errorData);
+      console.error("0x API error:", response.status, JSON.stringify(errorData));
       
       // If 0x fails, fallback to mock
-      if (response.status === 400 || response.status === 404) {
-        console.warn("0x quote unavailable, using mock data");
-        return NextResponse.json(buildMockQuote(fromSymbol, toSymbol, numericAmount, fromToken, toToken, walletAddress));
-      }
-      
-      throw new Error(errorData.reason || `0x API error: ${response.status}`);
+      console.warn("0x quote unavailable (status " + response.status + "), using mock data. Error:", errorData.reason || errorData.message || "unknown");
+      return NextResponse.json(buildMockQuote(fromSymbol, toSymbol, numericAmount, fromToken, toToken, walletAddress));
     }
+    
+    console.log("0x API success!");
 
     const data = await response.json();
 
