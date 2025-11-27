@@ -34,6 +34,7 @@ export function QuoteForm() {
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approvalMode, setApprovalMode] = useState<"exact" | "max">("exact");
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   const fromToken = TOKENS_BY_SYMBOL[fromSymbol];
   const toToken = TOKENS_BY_SYMBOL[toSymbol];
@@ -79,12 +80,23 @@ export function QuoteForm() {
     data: approveData,
     isLoading: isApproveLoading,
     write: approveWrite,
+    error: approveWriteError,
   } = useContractWrite({
     mode: "recklesslyUnprepared",
     address: (fromToken?.address ?? "0x0000000000000000000000000000000000000000") as `0x${string}`,
     abi: erc20Abi,
     functionName: "approve",
     args: [SEPOLIA_SPENDER.address, approvalAmount] as any,
+    onError: (err: Error) => {
+      const errorMessage = err.message?.slice(0, 120) || "Unknown error";
+      setApprovalError(errorMessage);
+      posthog?.capture("approve_failed", {
+        token: fromSymbol,
+        spender: SEPOLIA_SPENDER.address,
+        mode: approvalMode,
+        err_msg: errorMessage,
+      });
+    },
   } as any);
 
   // Wait for approve transaction
@@ -96,17 +108,33 @@ export function QuoteForm() {
   // Handle successful approval
   useEffect(() => {
     if (isApproveSuccess) {
+      setApprovalError(null);
       refetchAllowance();
       posthog?.capture("approve_mined", {
         token: fromSymbol,
         spender: SEPOLIA_SPENDER.address,
-        approvalMode,
+        mode: approvalMode,
         amount: approvalMode === "max" ? "unlimited" : amount,
       });
     }
   }, [isApproveSuccess, fromSymbol, approvalMode, amount, refetchAllowance]);
 
   const isApprovePending = isApproveLoading || isApproveWaiting;
+
+  // Handle approve button click
+  function handleApprove() {
+    if (!walletAddress || !fromToken) return;
+
+    setApprovalError(null);
+
+    posthog?.capture("approve_clicked", {
+      token: fromToken.symbol,
+      spender: SEPOLIA_SPENDER.address,
+      mode: approvalMode,
+    });
+
+    approveWrite?.();
+  }
 
   async function handleGetQuote(e: FormEvent) {
     e.preventDefault();
@@ -313,7 +341,7 @@ export function QuoteForm() {
                 {/* Approve button */}
                 <button
                   type="button"
-                  onClick={() => approveWrite?.()}
+                  onClick={handleApprove}
                   disabled={isApprovePending || !approveWrite}
                   className="w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:opacity-60"
                 >
@@ -323,6 +351,12 @@ export function QuoteForm() {
                     ? "Waiting for confirmation…"
                     : `Approve ${fromToken.symbol}`}
                 </button>
+
+                {approvalError && (
+                  <p className="text-red-400 text-xs">
+                    ❌ Approval failed: {approvalError}
+                  </p>
+                )}
 
                 {isApproveSuccess && (
                   <p className="text-emerald-300 text-xs">
