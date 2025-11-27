@@ -88,12 +88,13 @@ export function QuoteForm() {
     functionName: "approve",
     args: [SEPOLIA_SPENDER.address, approvalAmount] as any,
     onError: (err: Error) => {
-      const errorMessage = err.message?.slice(0, 120) || "Unknown error";
+      const errorMessage = err.message?.slice(0, 150) || "Unknown error";
       setApprovalError(errorMessage);
       posthog?.capture("approve_failed", {
         token: fromSymbol,
         spender: SEPOLIA_SPENDER.address,
         mode: approvalMode,
+        amount: amount,
         err_msg: errorMessage,
       });
     },
@@ -107,7 +108,7 @@ export function QuoteForm() {
 
   // Handle successful approval
   useEffect(() => {
-    if (isApproveSuccess) {
+    if (isApproveSuccess && approveData?.hash) {
       setApprovalError(null);
       refetchAllowance();
       posthog?.capture("approve_mined", {
@@ -115,9 +116,10 @@ export function QuoteForm() {
         spender: SEPOLIA_SPENDER.address,
         mode: approvalMode,
         amount: approvalMode === "unlimited" ? "unlimited" : amount,
+        tx_hash: approveData.hash,
       });
     }
-  }, [isApproveSuccess, fromSymbol, approvalMode, amount, refetchAllowance]);
+  }, [isApproveSuccess, approveData?.hash, fromSymbol, approvalMode, amount, refetchAllowance]);
 
   const isApprovePending = isApproveLoading || isApproveWaiting;
 
@@ -131,6 +133,7 @@ export function QuoteForm() {
       token: fromToken.symbol,
       spender: SEPOLIA_SPENDER.address,
       mode: approvalMode,
+      amount: amount,
     });
 
     approveWrite?.();
