@@ -2,6 +2,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
+// Use Edge runtime for faster cold starts
+export const runtime = "edge";
+
 type QuoteBody = {
   fromSymbol?: string;
   toSymbol?: string;
