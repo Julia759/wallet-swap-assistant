@@ -33,6 +33,10 @@ type QuoteResponse = {
   toTokenAddress?: string;
   amountInWei?: string;
   minAmountOut?: string;
+  // 0x specific
+  allowanceTarget?: string; // Contract to approve (from 0x)
+  sources?: Array<{ name: string; proportion: string }>; // DEX sources used
+  isMock?: boolean; // True if using fallback mock data
 };
 
 export function QuoteForm() {
@@ -64,6 +68,9 @@ export function QuoteForm() {
         })()
       : 0n;
 
+  // Use allowanceTarget from quote (0x) or fallback to default spender
+  const spenderAddress = (quote?.allowanceTarget || SEPOLIA_SPENDER.address) as `0x${string}`;
+
   const {
     data: allowanceRaw,
     isLoading: isAllowanceLoading,
@@ -74,7 +81,7 @@ export function QuoteForm() {
     functionName: "allowance",
     args:
       walletAddress && fromToken
-        ? [walletAddress as `0x${string}`, SEPOLIA_SPENDER.address]
+        ? [walletAddress as `0x${string}`, spenderAddress]
         : undefined,
     enabled: Boolean(walletAddress && fromToken),
   });
@@ -100,13 +107,13 @@ export function QuoteForm() {
     address: (fromToken?.address ?? "0x0000000000000000000000000000000000000000") as `0x${string}`,
     abi: erc20Abi,
     functionName: "approve",
-    args: [SEPOLIA_SPENDER.address, approvalAmount] as any,
+    args: [spenderAddress, approvalAmount] as any,
     onError: (err: Error) => {
       const errorMessage = err.message?.slice(0, 150) || "Unknown error";
       setApprovalError(errorMessage);
       posthog?.capture("approve_failed", {
         token: fromSymbol,
-        spender: SEPOLIA_SPENDER.address,
+        spender: spenderAddress,
         mode: approvalMode,
         amount: amount,
         err_msg: errorMessage,
@@ -127,7 +134,7 @@ export function QuoteForm() {
       refetchAllowance();
       posthog?.capture("approve_mined", {
         token: fromSymbol,
-        spender: SEPOLIA_SPENDER.address,
+        spender: spenderAddress,
         mode: approvalMode,
         amount: approvalMode === "unlimited" ? "unlimited" : amount,
         tx_hash: approveData.hash,
@@ -194,7 +201,7 @@ export function QuoteForm() {
 
     posthog?.capture("approve_clicked", {
       token: fromToken.symbol,
-      spender: SEPOLIA_SPENDER.address,
+      spender: spenderAddress,
       mode: approvalMode,
       amount: amount,
     });
@@ -364,6 +371,11 @@ export function QuoteForm() {
 
       {quote && (
         <div className="mt-4 rounded-xl bg-slate-950/70 px-4 py-3 text-sm leading-relaxed">
+          {quote.isMock && (
+            <p className="text-amber-400 text-xs mb-2">
+              ⚠️ Using mock data (no 0x API key or quote unavailable)
+            </p>
+          )}
           <p>
             1 {fromSymbol} ≈ {quote.price} {toSymbol}
           </p>
@@ -373,6 +385,11 @@ export function QuoteForm() {
           </p>
           <p>Estimated gas: {quote.estimatedGasEth} ETH (testnet)</p>
           <p>Estimated slippage: {quote.estimatedSlippagePercent}%</p>
+          {quote.sources && quote.sources.length > 0 && (
+            <p className="text-xs text-slate-400 mt-2">
+              DEX: {quote.sources.filter(s => Number(s.proportion) > 0).map(s => s.name).join(", ") || "0x"}
+            </p>
+          )}
         </div>
       )}
 
@@ -390,8 +407,8 @@ export function QuoteForm() {
               We check how much{" "}
               <span className="font-semibold">{fromToken.symbol}</span> you’ve
               already allowed{" "}
-              <span className="font-mono">{SEPOLIA_SPENDER.address}</span>{" "}
-              ({SEPOLIA_SPENDER.name}) to spend.
+              <span className="font-mono text-xs break-all">{spenderAddress}</span>{" "}
+              to spend.
             </p>
 
             <p className="mt-2">
