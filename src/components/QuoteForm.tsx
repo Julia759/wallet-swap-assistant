@@ -1,8 +1,14 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useAccount, useChainId, useContractRead } from "wagmi";
-import { erc20Abi, formatUnits, parseUnits } from "viem";
+import { FormEvent, useState, useEffect } from "react";
+import {
+  useAccount,
+  useChainId,
+  useContractRead,
+  useContractWrite,
+  useWaitForTransaction,
+} from "wagmi";
+import { erc20Abi, formatUnits, parseUnits, maxUint256 } from "viem";
 
 import { TOKENS, TOKENS_BY_SYMBOL, SEPOLIA_CHAIN_ID } from "@/config/tokens";
 import { SEPOLIA_SPENDER } from "@/config/spenders";
@@ -27,6 +33,7 @@ export function QuoteForm() {
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [approvalMode, setApprovalMode] = useState<"exact" | "max">("exact");
 
   const fromToken = TOKENS_BY_SYMBOL[fromSymbol];
   const toToken = TOKENS_BY_SYMBOL[toSymbol];
@@ -63,6 +70,43 @@ export function QuoteForm() {
   const needsApproval =
     Boolean(walletAddress && fromToken && hasAmount) &&
     allowance < amountInUnits;
+
+  // Calculate approval amount based on mode
+  const approvalAmount = approvalMode === "max" ? maxUint256 : amountInUnits;
+
+  // Approve contract write
+  const {
+    data: approveData,
+    isLoading: isApproveLoading,
+    write: approveWrite,
+  } = useContractWrite({
+    mode: "recklesslyUnprepared",
+    address: (fromToken?.address ?? "0x0000000000000000000000000000000000000000") as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "approve",
+    args: [SEPOLIA_SPENDER.address, approvalAmount] as any,
+  } as any);
+
+  // Wait for approve transaction
+  const { isLoading: isApproveWaiting, isSuccess: isApproveSuccess } =
+    useWaitForTransaction({
+      hash: approveData?.hash,
+    });
+
+  // Handle successful approval
+  useEffect(() => {
+    if (isApproveSuccess) {
+      refetchAllowance();
+      posthog?.capture("approve_mined", {
+        token: fromSymbol,
+        spender: SEPOLIA_SPENDER.address,
+        approvalMode,
+        amount: approvalMode === "max" ? "unlimited" : amount,
+      });
+    }
+  }, [isApproveSuccess, fromSymbol, approvalMode, amount, refetchAllowance]);
+
+  const isApprovePending = isApproveLoading || isApproveWaiting;
 
   async function handleGetQuote(e: FormEvent) {
     e.preventDefault();
@@ -233,11 +277,59 @@ export function QuoteForm() {
             </p>
 
             {hasAmount && !isAllowanceLoading && needsApproval && (
-              <p className="mt-2 text-amber-300">
-                Your allowance is lower than {amount} {fromToken.symbol}. In the
-                next step we’ll add an Approve button so you can set a safe
-                spending limit.
-              </p>
+              <div className="mt-3 space-y-3">
+                <p className="text-amber-300">
+                  Your allowance is lower than {amount} {fromToken.symbol}.
+                  Approve the spender to continue.
+                </p>
+
+                {/* Exact / Max selector */}
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400">Approve:</span>
+                  <button
+                    type="button"
+                    onClick={() => setApprovalMode("exact")}
+                    className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+                      approvalMode === "exact"
+                        ? "bg-emerald-500 text-slate-950"
+                        : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    }`}
+                  >
+                    Exact ({amount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setApprovalMode("max")}
+                    className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+                      approvalMode === "max"
+                        ? "bg-emerald-500 text-slate-950"
+                        : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    }`}
+                  >
+                    Unlimited
+                  </button>
+                </div>
+
+                {/* Approve button */}
+                <button
+                  type="button"
+                  onClick={() => approveWrite?.()}
+                  disabled={isApprovePending || !approveWrite}
+                  className="w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:opacity-60"
+                >
+                  {isApproveLoading
+                    ? "Confirm in wallet…"
+                    : isApproveWaiting
+                    ? "Waiting for confirmation…"
+                    : `Approve ${fromToken.symbol}`}
+                </button>
+
+                {isApproveSuccess && (
+                  <p className="text-emerald-300 text-xs">
+                    ✅ Approval confirmed! You can now swap.
+                  </p>
+                )}
+              </div>
             )}
 
             {hasAmount && !isAllowanceLoading && !needsApproval && (
